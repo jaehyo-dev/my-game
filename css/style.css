@@ -185,14 +185,14 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-/* 새 기록을 짧은 색상 변화로 강조해 결과를 빠르게 알아보게 한다. */
+/* 새 기록은 부드럽게 커졌다 작아지는 움직임으로 강조한다(깜빡임 없이). */
 .new-record {
   margin: 0 0 12px;
   color: #ffe879;
   font-size: 21px;
   font-weight: 900;
-  text-shadow: 0 0 12px #ff9d38;
-  animation: record-pop .7s steps(2, end) infinite alternate;
+  text-shadow: 0 0 8px #ff9d3880;
+  animation: record-pop 1.2s ease-in-out infinite alternate;
 }
 
 @keyframes record-pop {
@@ -201,8 +201,14 @@ h2 {
   }
 
   to {
-    transform: scale(1.12);
-    color: #fff;
+    transform: scale(1.08);
+  }
+}
+
+/* 움직임 줄이기를 켠 사용자에게는 애니메이션을 끈다. */
+@media (prefers-reduced-motion: reduce) {
+  .new-record {
+    animation: none;
   }
 }
 

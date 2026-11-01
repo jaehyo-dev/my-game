@@ -31,6 +31,7 @@
   let elapsedVisual = 0;
   let previous = 0;
   let gameoverAt = 0;
+  let debris = []; // 부서진 운석의 파편 (연출 전용)
 
   bestEl.textContent = String(best);
 
@@ -57,7 +58,9 @@
     hud.hidden = false;
     scoreEl.textContent = '0';
     bestEl.textContent = String(best);
+    debris = [];
     window.GameAudio.start();
+    window.GameAudio.startMusic();
   }
 
   // 결과를 저장하고 충돌 위치의 상태를 유지한 채 결과 화면을 표시한다.
@@ -75,6 +78,7 @@
     newRecord.hidden = !result.isNew;
     hud.hidden = true;
     gameoverScreen.hidden = false;
+    window.GameAudio.stopMusic();
     window.GameAudio.collision();
     if (result.isNew) {
       window.GameAudio.record();
@@ -195,11 +199,17 @@
     pointerId = null;
     targetX = null;
   });
+  // 탭이 숨겨지면 게임이 멈추므로 배경음도 멈추고, 돌아오면 게임 중일 때만 다시 튼다.
   document.addEventListener('visibilitychange', () => {
     previous = 0;
     keys.clear();
     pointerId = null;
     targetX = null;
+    if (document.hidden) {
+      window.GameAudio.pauseMusic();
+    } else if (mode === 'playing') {
+      window.GameAudio.resumeMusic();
+    }
   });
 
   // 모바일 브라우저의 확대 제스처와 스크롤이 조작을 가로채지 않게 막는다.
@@ -220,6 +230,17 @@
       const right = keys.has('ArrowRight') || keys.has('KeyD');
       const direction = left === right ? 0 : left ? -1 : 1;
       state = logic.stepGame(state, dt, { direction, targetX });
+      // 이번 프레임에 부서진 운석마다 파편을 뿌리고, 효과음은 프레임당 한 번만 낸다.
+      let biggestDestroyed = 0;
+      for (const event of state.events) {
+        if (event.type === 'destroy') {
+          debris = debris.concat(logic.createDebris(event.x, event.y, event.radius));
+          biggestDestroyed = Math.max(biggestDestroyed, event.radius);
+        }
+      }
+      if (biggestDestroyed > 0) {
+        window.GameAudio.destroy(biggestDestroyed);
+      }
       scoreEl.textContent = String(state.score);
       bestEl.textContent = String(Math.max(best, state.score));
       if (state.over) {
@@ -227,7 +248,8 @@
       }
     }
 
-    ctxRenderer.draw(state, elapsedVisual, mode === 'playing');
+    debris = logic.stepDebris(debris, dt);
+    ctxRenderer.draw(state, elapsedVisual, mode === 'playing', debris);
     requestAnimationFrame(frame);
   }
 
