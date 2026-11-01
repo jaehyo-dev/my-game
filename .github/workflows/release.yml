@@ -1,18 +1,21 @@
-# 태그(v*)가 올라오거나 변경 기록이 바뀌면, 태그는 있는데 릴리스가 없는 버전마다
-# CHANGELOG.md의 해당 부분을 설명으로 넣어 GitHub Release를 만든다.
-# 예전 커밋에 붙인 태그(이 파일이 없던 시점)도 처리할 수 있도록 매번 전체를 맞춘다.
+# master에 푸시되면 CHANGELOG.md의 최신 버전을 읽어, 그 버전 태그(v메이저.마이너.패치)가 없으면
+# 푸시된 커밋에 태그를 만들고, 태그는 있는데 릴리스가 없는 버전마다 GitHub Release를 만든다.
+# 클라우드 작업 환경에서는 태그 푸시가 막혀 있어서, 태그 생성까지 여기서 맡는다.
+# 직접 올린 태그(v*)나 수동 실행도 릴리스 맞추기에 쓸 수 있다.
 name: Release
 
 on:
   push:
-    tags: ['v*']
     branches: [master]
-    paths: ['CHANGELOG.md']
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# 연속 푸시가 겹쳐도 태그·릴리스를 한 번에 하나씩 처리한다(실행 중인 것은 취소하지 않음).
+# 단, GitHub은 대기 중인 실행을 하나만 남기므로 실행 중에 버전을 올린 푸시가 두 번 이상 몰리면
+# 가운데 버전은 건너뛸 수 있다. 버전을 올리는 푸시는 한 번에 하나씩 하고 결과를 확인한다.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -21,14 +24,35 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      # 변경 기록은 항상 master의 최신 내용을 기준으로 한다.
+      # master 푸시는 그 푸시의 커밋을, 그 밖의 실행은 최신 master를 기준으로 한다.
       - uses: actions/checkout@v4
         with:
-          ref: master
+          ref: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' && github.sha || 'master' }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: 최신 버전 태그가 없으면 만들기
+        # 직접 올린 태그로 실행된 경우에는 새 태그를 만들지 않는다.
+        if: github.ref_type != 'tag'
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          # CHANGELOG 최신 버전이 게임·package.json 버전과 다르면 여기서 실패한다.
+          version=$(node scripts/changelog.js latest)
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag: 태그가 이미 있음 ($(git rev-list -n 1 "$tag"))"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$tag" HEAD
+          # 기본 토큰으로 올린 태그는 워크플로를 다시 실행시키지 않으므로 반복되지 않는다.
+          git push origin "refs/tags/$tag"
+          echo "$tag: 태그 생성 ($(git rev-parse HEAD))"
+
       - name: 릴리스가 없는 태그에 릴리스 만들기
         env:
           GH_TOKEN: ${{ github.token }}

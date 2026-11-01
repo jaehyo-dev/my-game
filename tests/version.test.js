@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { parseChangelog, releaseNotes } = require('../scripts/changelog.js');
+const { parseChangelog, releaseNotes, versionMismatches, main } = require('../scripts/changelog.js');
 const { VERSION } = require('../js/version.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -93,4 +93,45 @@ test('이전 버전: 목록 페이지가 보관된 모든 버전과 최신 버�
   const dirs = fs.readdirSync(path.join(ROOT, 'versions'), { withFileTypes: true }).filter((d) => d.isDirectory());
   for (const dir of dirs) assert.ok(html.includes(`href="${dir.name}/"`), `${dir.name} 링크 없음`);
   assert.ok(html.includes('href="../"'));
+});
+
+test('자동 태그: 최신 버전이 게임·package.json과 같으면 문제 없음', () => {
+  const text = '## [1.3.0] - 2026-01-03\n- 새 것\n\n## [1.2.0] - 2026-01-02\n- 예전 것\n';
+  assert.deepEqual(versionMismatches(text, '1.3.0', '1.3.0'), []);
+});
+
+test('자동 태그: 버전이 하나라도 다르면 이유와 함께 알려 줌', () => {
+  const text = '## [1.3.0] - 2026-01-03\n- 새 것\n';
+  const game = versionMismatches(text, '1.2.0', '1.3.0');
+  assert.equal(game.length, 1);
+  assert.match(game[0], /js\/version\.js\(1\.2\.0\)/);
+  const pkg = versionMismatches(text, '1.3.0', '1.2.0');
+  assert.equal(pkg.length, 1);
+  assert.match(pkg[0], /package\.json\(1\.2\.0\)/);
+  assert.equal(versionMismatches('# 기록만 있고 버전 없음', '1.0.0', '1.0.0').length, 1);
+});
+
+test('자동 태그: latest 명령은 현재 저장소의 최신 버전을 출력하고 성공', () => {
+  const written = [];
+  const original = process.stdout.write;
+  process.stdout.write = (chunk) => { written.push(String(chunk)); return true; };
+  let code;
+  try {
+    code = main(['latest']);
+  } finally {
+    process.stdout.write = original;
+  }
+  assert.equal(code, 0);
+  assert.equal(written.join('').trim(), VERSION);
+});
+
+test('자동 태그: 워크플로가 master 푸시 때 최신 버전 태그와 릴리스를 만들도록 설정됨', () => {
+  const yml = read('.github/workflows/release.yml');
+  assert.match(yml, /branches: \[master\]/);
+  assert.match(yml, /contents: write/);
+  assert.match(yml, /node scripts\/changelog\.js latest/);
+  assert.match(yml, /git tag -a "\$tag"/);
+  assert.match(yml, /gh release create "\$tag"/);
+  // 경로 필터가 있으면 CHANGELOG를 안 바꾼 푸시에서 실행되지 않으므로 두지 않는다.
+  assert.doesNotMatch(yml, /paths:/);
 });
