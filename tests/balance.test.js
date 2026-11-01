@@ -1,5 +1,6 @@
 // 난이도 밸런스 시뮬레이션: "1분 안에 대부분 게임오버"를 봇으로 검증한다.
 // 실제 사람 대신 실력이 다른 봇을 여러 판 돌려 생존 시간 분포를 본다.
+// 자동 공격은 stepGame 안에서 항상 동작하므로 모든 봇이 운석을 쏘며 플레이한다.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const L = require('../js/logic.js');
@@ -32,10 +33,10 @@ function safeAt(x, k, meteors, margin) {
 
 // 화면에 보이는 운석을 모두 아는 상태에서 PLAN_STEPS 뒤까지 살아남는 경로를 찾아
 // holdSteps칸 뒤에 있어야 할 위치(경유 지점)를 돌려준다. 앞으로 생길 운석은 모른다.
-// 오래 살아남는 경로 중에서는 화면 가운데에 가까운 쪽을 고른다(벽에 몰리면 불리하므로).
-function planWaypoint(game, margin, holdSteps, maxCells) {
+// 오래 살아남는 경로 중에서는 preferX에 가까운 쪽을 고른다(기본은 화면 가운데: 벽에 몰리면 불리하므로).
+function planWaypoint(game, margin, holdSteps, maxCells, preferX) {
   const originX = game.shipX;
-  const centerX = CONFIG.WORLD_WIDTH / 2;
+  const centerX = typeof preferX === 'number' ? preferX : CONFIG.WORLD_WIDTH / 2;
   // 키: 현재 위치에서 떨어진 칸 수, 값: 그 칸에 이르는 경로의 경유 지점
   let frontier = new Map([[0, originX]]);
   // 제자리부터 가까운 이동 순으로 시도한다.
@@ -72,8 +73,18 @@ function planWaypoint(game, margin, holdSteps, maxCells) {
 
 // 한 판을 끝까지 돌리고 생존 시간을 돌려준다.
 // reaction: 다시 판단하기까지의 시간(초), margin: 운석과 두는 여유 거리(사람의 부정확함을 흉내 낸다).
+// 사냥형 봇이 노릴 운석: 아직 위쪽에 있어 쏠 시간이 있는 운석 중 가장 아래 것.
+function huntTargetX(game) {
+  let target = null;
+  for (const m of game.meteors) {
+    if (m.y < CONFIG.SHIP_Y - 80 && (!target || m.y > target.y)) target = m;
+  }
+  return target ? target.x : undefined;
+}
+
 // drag: true면 휴대폰처럼 드래그로, false면 키보드 속도로 움직인다.
-function playGame(seed, reaction, margin, drag) {
+// hunt: true면 안전한 경로 중 운석 바로 아래를 골라 보너스를 노린다.
+function playGame(seed, reaction, margin, drag, hunt) {
   const game = L.createGame(seededRng(seed));
   const holdSteps = Math.max(1, Math.round(reaction / PLAN_DT));
   let target = game.shipX;
@@ -82,7 +93,8 @@ function playGame(seed, reaction, margin, drag) {
     sinceDecision += FRAME;
     if (sinceDecision >= reaction) {
       sinceDecision = 0;
-      target = planWaypoint(game, margin, holdSteps, drag ? DRAG_CELLS : KEYBOARD_CELLS);
+      const preferX = hunt ? huntTargetX(game) : undefined;
+      target = planWaypoint(game, margin, holdSteps, drag ? DRAG_CELLS : KEYBOARD_CELLS, preferX);
     }
     if (drag) {
       // 드래그 속도 제한은 실제 게임 로직이 적용한다.
@@ -93,18 +105,24 @@ function playGame(seed, reaction, margin, drag) {
       L.stepGame(game, FRAME, { targetX: game.shipX + move });
     }
   }
-  return game.elapsed;
+  return { elapsed: game.elapsed, score: game.score, bonus: game.bonus };
 }
 
-function surviveStats(games, reaction, margin, drag) {
+function surviveStats(games, reaction, margin, drag, hunt) {
   const times = [];
-  for (let seed = 1; seed <= games; seed++) times.push(playGame(seed, reaction, margin, drag));
+  let bonusShare = 0;
+  for (let seed = 1; seed <= games; seed++) {
+    const result = playGame(seed, reaction, margin, drag, hunt);
+    times.push(result.elapsed);
+    bonusShare += result.score > 0 ? result.bonus / result.score : 0;
+  }
   times.sort((a, b) => a - b);
   return {
     min: times[0],
     median: times[Math.floor(times.length / 2)],
     max: times[times.length - 1],
     under60: times.filter((t) => t < 60).length / times.length,
+    bonusShare: bonusShare / games, // 점수 중 파괴 보너스가 차지하는 평균 비율
   };
 }
 
@@ -129,10 +147,38 @@ test('밸런스: 드래그로 움직이는 사람형 봇도 대부분 1분 안�
   assert.ok(stats.median >= 15, `생존 시간 중앙값 ${stats.median}`);
 });
 
+test('밸런스: 운석을 노려 쏘는 사냥형 봇도 대부분 1분 안에 게임오버', () => {
+  const stats = surviveStats(100, 0.25, 4, false, true);
+  console.log('사냥형 봇', stats);
+  assert.ok(stats.under60 >= 0.9, `1분 안 게임오버 비율 ${stats.under60}`);
+  // 보너스는 덤이어야 하고 점수의 대부분은 버틴 시간이어야 한다.
+  assert.ok(stats.bonusShare > 0 && stats.bonusShare < 0.5, `보너스 비율 ${stats.bonusShare}`);
+});
+
+test('밸런스: 운석이 늘어나는 속도가 시간이 갈수록 공격력을 앞지름', () => {
+  // 크기별 체력의 평균(반지름은 MIN~MAX 균등 분포).
+  let hpSum = 0;
+  let radiusCount = 0;
+  for (let r = CONFIG.METEOR_MIN_RADIUS; r <= CONFIG.METEOR_MAX_RADIUS; r++) {
+    hpSum += L.meteorHp(r);
+    radiusCount++;
+  }
+  const averageHp = hpSum / radiusCount;
+  const shotsPerSecond = 1 / CONFIG.FIRE_INTERVAL; // 시간이 지나도 변하지 않는다
+  const hpPerSecond = (t) => averageHp / L.difficultyAt(t).spawnInterval;
+  // 들어오는 운석 체력은 줄어들지 않고, 공격력은 그대로다.
+  for (let t = 1; t <= 60; t++) assert.ok(hpPerSecond(t) >= hpPerSecond(t - 1), `${t}초`);
+  // 시작할 때는 공격으로 어느 정도 버틸 만하다(들어오는 체력이 탄의 2배 미만).
+  assert.ok(hpPerSecond(0) < shotsPerSecond * 2, `시작 운석 체력/초 ${hpPerSecond(0)}`);
+  // 30초에는 들어오는 운석 체력이 쏠 수 있는 탄의 3배를 넘는다.
+  assert.ok(hpPerSecond(30) > shotsPerSecond * 3, `30초 운석 체력/초 ${hpPerSecond(30)}`);
+});
+
 test('밸런스: 가만히 있으면 금방 맞지만 시작 직후 바로 죽지는 않음', () => {
   const times = [];
   for (let seed = 1; seed <= 200; seed++) {
     const game = L.createGame(seededRng(seed));
+    // 가만히 있어도 자동 공격은 계속된다.
     while (!game.over && game.elapsed < TIME_LIMIT) L.stepGame(game, FRAME, {});
     times.push(game.elapsed);
   }

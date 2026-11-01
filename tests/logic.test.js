@@ -331,3 +331,247 @@ test('진행: 후반에는 같은 시간 동안 운석이 더 많이 생성됨',
   }
   assert.ok(countSpawned(30, 5) > countSpawned(0, 5) * 2);
 });
+
+// ---------- 자동 공격 ----------
+// 운석 생성을 끈 게임을 만든다. 발사 타이머는 그대로 둔다.
+function quietGame(seed) {
+  const game = L.createGame(seededRng(seed));
+  game.spawnTimer = 1e9;
+  return game;
+}
+
+test('공격: 운석 크기별 체력은 작은 1, 중간 2, 큰 3', () => {
+  assert.equal(L.meteorHp(CONFIG.METEOR_MIN_RADIUS), 1);
+  assert.equal(L.meteorHp(CONFIG.METEOR_SMALL_MAX_RADIUS), 1);
+  assert.equal(L.meteorHp(CONFIG.METEOR_SMALL_MAX_RADIUS + 1), 2);
+  assert.equal(L.meteorHp(CONFIG.METEOR_MEDIUM_MAX_RADIUS), 2);
+  assert.equal(L.meteorHp(CONFIG.METEOR_MEDIUM_MAX_RADIUS + 1), 3);
+  assert.equal(L.meteorHp(CONFIG.METEOR_MAX_RADIUS), 3);
+});
+
+test('공격: 새 운석은 크기에 맞는 체력을 가짐', () => {
+  const rng = seededRng(11);
+  for (let i = 0; i < 500; i++) {
+    const m = L.createMeteor(0, rng);
+    assert.equal(m.hp, L.meteorHp(m.radius));
+    assert.equal(m.maxHp, m.hp);
+  }
+});
+
+test('공격: 일정 간격으로 우주선 위치에서 위로 자동 발사', () => {
+  const game = quietGame(12);
+  // stepGame은 한 번에 최대 MAX_STEP_SECONDS까지만 진행하므로 작게 나눠 진행한다.
+  while (game.elapsed < CONFIG.FIRST_FIRE_DELAY - 0.01 - 1e-9) {
+    L.stepGame(game, Math.min(0.01, CONFIG.FIRST_FIRE_DELAY - 0.01 - game.elapsed), {});
+  }
+  assert.equal(game.bullets.length, 0);
+  L.stepGame(game, 0.02, {});
+  assert.equal(game.bullets.length, 1);
+  const bullet = game.bullets[0];
+  assert.equal(bullet.x, game.shipX);
+  assert.ok(bullet.y < CONFIG.SHIP_Y);
+  const y = bullet.y;
+  L.stepGame(game, 0.05, {});
+  assert.ok(game.bullets[0].y < y, '탄은 위로 움직인다');
+});
+
+test('공격: 발사 수는 시간에만 비례하고 프레임 길이에 따라 늘지 않음', () => {
+  const duration = 10;
+  for (const frame of [1 / 120, 1 / 60, 1 / 30, 0.05]) {
+    const game = quietGame(13);
+    let fired = 0;
+    let lastCount = 0;
+    while (game.elapsed < duration - 1e-9) {
+      L.stepGame(game, Math.min(frame, duration - game.elapsed), {});
+      // 화면 밖으로 나가 사라지는 탄이 있으므로 새로 생긴 탄만 센다.
+      fired += Math.max(0, game.bullets.length - lastCount);
+      lastCount = game.bullets.length;
+    }
+    const expected = Math.floor((duration - CONFIG.FIRST_FIRE_DELAY) / CONFIG.FIRE_INTERVAL) + 1;
+    assert.ok(Math.abs(fired - expected) <= 1, `프레임 ${frame}: ${fired}발 (예상 ${expected})`);
+  }
+});
+
+test('공격: 화면 위로 나간 탄은 제거', () => {
+  const game = quietGame(14);
+  game.fireTimer = 1e9;
+  game.bullets.push({ x: 100, y: -CONFIG.BULLET_HEIGHT - 1 });
+  L.stepGame(game, 0.02, {});
+  assert.equal(game.bullets.length, 0);
+});
+
+test('공격: 작은 운석은 한 발에 부서지고 보너스와 파괴 이벤트가 생김', () => {
+  const game = quietGame(15);
+  game.fireTimer = 1e9;
+  game.meteors.push({ x: 60, y: 100, radius: 6, speed: 0, variant: 1, hp: 1, maxHp: 1 });
+  game.bullets.push({ x: 60, y: 110 });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.meteors.length, 0);
+  assert.equal(game.bullets.length, 0, '맞은 탄은 사라진다');
+  assert.equal(game.bonus, L.destroyBonus(1));
+  assert.equal(game.destroyed, 1);
+  assert.equal(game.score, L.scoreFromElapsed(game.elapsed) + game.bonus);
+  assert.deepEqual(game.events.map((e) => e.type), ['destroy']);
+  assert.equal(game.events[0].radius, 6);
+});
+
+test('공격: 큰 운석은 세 번 맞아야 부서지고 그전에는 보너스가 없음', () => {
+  const game = quietGame(16);
+  game.fireTimer = 1e9;
+  const big = { x: 60, y: 100, radius: 15, speed: 0, variant: 0, hp: 3, maxHp: 3 };
+  game.meteors.push(big);
+  for (let shot = 1; shot <= 2; shot++) {
+    game.bullets.push({ x: 60, y: 120 });
+    L.stepGame(game, 1 / 60, {});
+    assert.equal(big.hp, 3 - shot);
+    assert.equal(game.meteors.length, 1);
+    assert.equal(game.bonus, 0);
+    assert.deepEqual(game.events.map((e) => e.type), ['hit']);
+  }
+  game.bullets.push({ x: 60, y: 120 });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.meteors.length, 0);
+  assert.equal(game.bonus, L.destroyBonus(3));
+  assert.ok(L.destroyBonus(3) > L.destroyBonus(1), '큰 운석 보너스가 더 큼');
+});
+
+test('공격: 탄은 겹친 운석 중 하나(가장 아래)에만 맞음', () => {
+  const game = quietGame(17);
+  game.fireTimer = 1e9;
+  const upper = { x: 60, y: 96, radius: 8, speed: 0, variant: 0, hp: 1, maxHp: 1 };
+  const lower = { x: 60, y: 104, radius: 8, speed: 0, variant: 0, hp: 1, maxHp: 1 };
+  game.meteors.push(upper, lower);
+  game.bullets.push({ x: 60, y: 100 });
+  L.stepGame(game, 1 / 60, {});
+  assert.deepEqual(game.meteors, [upper]);
+  assert.equal(game.destroyed, 1);
+});
+
+test('공격: 탄이 운석 옆을 아슬아슬하게 지나가면 안 맞음', () => {
+  const game = quietGame(18);
+  game.fireTimer = 1e9;
+  const r = 6;
+  const meteor = { x: 60, y: 100, radius: r, speed: 0, variant: 0, hp: 1, maxHp: 1 };
+  game.meteors.push(meteor);
+  // 탄 오른쪽 변이 운석 왼쪽 끝보다 살짝 왼쪽에 있다.
+  game.bullets.push({ x: 60 - r - CONFIG.BULLET_WIDTH / 2 - 0.01, y: 104 });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.meteors.length, 1);
+  assert.equal(game.bonus, 0);
+});
+
+test('공격: 최고 속도에서도 탄과 가장 작은 운석이 서로를 건너뛰지 못함', () => {
+  const maxMeteor = CONFIG.MAX_FALL_SPEED * (1 + CONFIG.METEOR_SPEED_JITTER);
+  const perStep = (CONFIG.BULLET_SPEED + maxMeteor) * CONFIG.MAX_SUBSTEP_SECONDS;
+  assert.ok(perStep < CONFIG.BULLET_HEIGHT + CONFIG.METEOR_MIN_RADIUS * 2);
+});
+
+test('공격: 빠르게 마주 오는 운석과 탄도 긴 프레임에서 명중', () => {
+  const game = quietGame(19);
+  game.fireTimer = 1e9;
+  const meteor = { x: 60, y: 80, radius: CONFIG.METEOR_MIN_RADIUS, speed: 390, variant: 0, hp: 1, maxHp: 1 };
+  game.meteors.push(meteor);
+  game.bullets.push({ x: 60, y: 100 });
+  L.stepGame(game, CONFIG.MAX_STEP_SECONDS, {});
+  assert.equal(game.destroyed, 1);
+});
+
+test('공격: 우주선 바로 위에서 부서진 운석은 충돌을 일으키지 않음', () => {
+  const game = quietGame(20);
+  game.fireTimer = 1e9;
+  const box = L.shipHitbox(game.shipX);
+  // 다음 조각에서 우주선에 닿을 운석을 같은 조각에서 탄이 부순다.
+  game.meteors.push({ x: game.shipX, y: box.y - 6.5, radius: 6, speed: 60, variant: 0, hp: 1, maxHp: 1 });
+  game.bullets.push({ x: game.shipX, y: box.y - 8 });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.over, false);
+  assert.equal(game.destroyed, 1);
+});
+
+test('공격: 이벤트는 stepGame 호출마다 새로 비워짐', () => {
+  const game = quietGame(21);
+  game.fireTimer = 1e9;
+  game.meteors.push({ x: 60, y: 100, radius: 6, speed: 0, variant: 0, hp: 1, maxHp: 1 });
+  game.bullets.push({ x: 60, y: 110 });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.events.length, 1);
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.events.length, 0);
+  // 게임오버 뒤 호출에서도 이전 이벤트가 다시 보이지 않는다.
+  game.over = true;
+  game.events.push({ type: 'destroy' });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.events.length, 0);
+});
+
+test('공격: 게임오버 뒤에는 탄도 멈춤', () => {
+  const game = quietGame(22);
+  game.over = true;
+  game.bullets.push({ x: 60, y: 200 });
+  L.stepGame(game, 0.05, {});
+  assert.equal(game.bullets[0].y, 200);
+});
+
+// ---------- 점수 (보너스 포함) ----------
+test('점수: 시간 점수에 보너스를 더함', () => {
+  assert.equal(L.totalScore(12.34, 0), 123);
+  assert.equal(L.totalScore(12.34, 15), 138);
+  assert.equal(L.totalScore(0, 5), 5);
+});
+
+test('점수: 잘못된 보너스는 0으로 처리', () => {
+  for (const bad of [NaN, -5, Infinity, undefined, null]) assert.equal(L.totalScore(1, bad), 10);
+});
+
+test('점수: 보너스는 체력 1당 BONUS_PER_HP', () => {
+  assert.equal(L.destroyBonus(1), CONFIG.BONUS_PER_HP);
+  assert.equal(L.destroyBonus(2), CONFIG.BONUS_PER_HP * 2);
+  assert.equal(L.destroyBonus(3), CONFIG.BONUS_PER_HP * 3);
+  assert.equal(L.destroyBonus(0), 0);
+});
+
+test('점수: 실제 게임에서 점수 = 시간 점수 + 누적 보너스', () => {
+  const game = L.createGame(seededRng(23));
+  while (!game.over && game.elapsed < 30) L.stepGame(game, 1 / 60, {});
+  assert.ok(game.destroyed > 0, '가만히 있어도 위로 쏜 탄에 부서진 운석이 있다');
+  assert.equal(game.score, L.scoreFromElapsed(game.elapsed) + game.bonus);
+});
+
+// ---------- 파편 ----------
+test('파편: 부서진 위치 주변에 크기에 비례한 개수로 생김', () => {
+  const small = L.createDebris(50, 60, 5, seededRng(24));
+  const big = L.createDebris(50, 60, 16, seededRng(24));
+  assert.ok(small.length >= 6);
+  assert.ok(big.length > small.length);
+  for (const p of big) {
+    assert.ok(Math.hypot(p.x - 50, p.y - 60) <= 16);
+    assert.ok(p.life > 0 && p.life <= CONFIG.DEBRIS_LIFE);
+    assert.equal(p.maxLife, p.life);
+  }
+});
+
+test('파편: 시간이 지나면 움직이고 수명이 다하면 모두 사라짐', () => {
+  let pieces = L.createDebris(50, 60, 10, seededRng(25));
+  const first = { x: pieces[0].x, y: pieces[0].y };
+  pieces = L.stepDebris(pieces, 0.05);
+  assert.ok(pieces[0].x !== first.x || pieces[0].y !== first.y);
+  for (let i = 0; i < 20; i++) pieces = L.stepDebris(pieces, 0.05);
+  assert.equal(pieces.length, 0);
+});
+
+test('파편: 잘못된 dt는 무시', () => {
+  const pieces = L.createDebris(50, 60, 10, seededRng(26));
+  const copy = JSON.stringify(pieces);
+  for (const dt of [0, -1, NaN]) assert.equal(JSON.stringify(L.stepDebris(pieces, dt)), copy);
+});
+
+test('공격: 체력 정보가 없는 운석도 크기에 맞는 체력으로 맞아서 부서짐', () => {
+  const game = quietGame(27);
+  game.fireTimer = 1e9;
+  const meteor = { x: 60, y: 100, radius: 6, speed: 0, variant: 0 };
+  game.meteors.push(meteor);
+  game.bullets.push({ x: 60, y: 110 });
+  L.stepGame(game, 1 / 60, {});
+  assert.equal(game.meteors.length, 0);
+  assert.equal(game.bonus, L.destroyBonus(L.meteorHp(6)));
+});
