@@ -19,6 +19,7 @@
     SHIP_Y: 364, // 우주선 위쪽 변의 y 좌표
     SHIP_HITBOX_INSET: 3, // 판정을 그림보다 조금 작게 잡아 억울한 충돌을 줄인다
     SHIP_SPEED: 200, // 키보드 이동 속도 (픽셀/초)
+    DRAG_SPEED: 1200, // 드래그 최대 속도. 손가락을 바로 따라가 보이되 순간이동으로 운석을 건너뛰지 못하게 한다
     METEOR_MIN_RADIUS: 5,
     METEOR_MAX_RADIUS: 16,
     METEOR_SPEED_JITTER: 0.15, // 운석별 속도 편차 (±15%)
@@ -31,6 +32,7 @@
     SPAWN_INTERVAL_DECAY: 0.97, // 1초마다 생성 간격에 곱하는 값
     MIN_SPAWN_INTERVAL: 0.08,
     MAX_STEP_SECONDS: 0.05, // 탭 전환 등으로 프레임이 길어져도 운석이 순간이동하지 않게 제한
+    MAX_SUBSTEP_SECONDS: 1 / 60, // 느린 기기에서도 판정을 건너뛰지 않도록 긴 프레임을 나눠 계산
     SCORE_PER_SECOND: 10,
     HIGH_SCORE_KEY: 'meteor-dodge.highScore',
   });
@@ -47,11 +49,12 @@
   }
 
   // 입력을 반영한 다음 우주선 위치를 계산한다.
-  // 드래그(targetX)가 있으면 손가락 위치를 바로 따라가고, 없으면 방향(-1, 0, 1)으로 움직인다.
+  // 드래그(targetX)가 있으면 손가락 위치를 DRAG_SPEED 한도 안에서 따라가고, 없으면 방향(-1, 0, 1)으로 움직인다.
   function nextShipX(x, input, dt) {
     const targetX = input && input.targetX;
     if (typeof targetX === 'number' && Number.isFinite(targetX)) {
-      return clampShipX(targetX);
+      const limit = CONFIG.DRAG_SPEED * dt;
+      return clamp(clampShipX(targetX), x - limit, x + limit);
     }
     const direction = (input && input.direction) || 0;
     return clampShipX(x + Math.sign(direction) * CONFIG.SHIP_SPEED * dt);
@@ -127,8 +130,16 @@
   // 게임을 dt초만큼 진행한다. state를 직접 바꾸고 그대로 돌려준다.
   function stepGame(state, dt, input) {
     if (state.over || !Number.isFinite(dt) || dt <= 0) return state;
-    const step = Math.min(dt, CONFIG.MAX_STEP_SECONDS);
+    const total = Math.min(dt, CONFIG.MAX_STEP_SECONDS);
+    const count = Math.ceil(total / CONFIG.MAX_SUBSTEP_SECONDS - 1e-9);
+    for (let i = 0; i < count && !state.over; i++) {
+      advance(state, total / count, input);
+    }
+    return state;
+  }
 
+  // 작은 시간 조각 하나만큼 이동, 점수, 운석 생성, 충돌을 처리한다.
+  function advance(state, step, input) {
     state.shipX = nextShipX(state.shipX, input, step);
     state.elapsed += step;
     state.score = scoreFromElapsed(state.elapsed);
@@ -149,7 +160,6 @@
       if (meteor.y - meteor.radius <= CONFIG.WORLD_HEIGHT) remaining.push(meteor);
     }
     state.meteors = remaining;
-    return state;
   }
 
   // localStorage 접근 자체가 예외를 던지는 환경(차단된 쿠키 등)에서도 안전하게 가져온다.

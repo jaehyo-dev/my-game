@@ -227,3 +227,89 @@ h2 {
     margin: 5px 0;
   }
 }
+
+/* 낮거나 좁은 화면에서는 점수 표시와 음소거 버튼을 줄여 서로 겹치지 않게 한다. */
+@media (max-height: 480px), (max-width: 280px) {
+  .hud {
+    top: max(6px, env(safe-area-inset-top));
+    left: max(6px, env(safe-area-inset-left));
+    gap: 4px;
+  }
+
+  .hud div {
+    padding: 3px 5px;
+    font-size: 10px;
+  }
+
+  .hud strong {
+    margin-left: 3px;
+    font-size: 12px;
+  }
+
+  .mute {
+    top: max(6px, env(safe-area-inset-top));
+    right: max(6px, env(safe-area-inset-right));
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+}
+
+/* 휴대폰 가로 화면처럼 아주 낮은 화면에서는 패널을 압축해 버튼이 잘리지 않게 한다. */
+@media (max-height: 400px) {
+  .hud {
+    gap: 2px;
+  }
+
+  .hud div {
+    padding: 2px 3px;
+  }
+
+  .screen {
+    padding: 4px;
+  }
+
+  .panel {
+    width: 100%;
+    padding: 8px;
+  }
+
+  .eyebrow {
+    display: none;
+  }
+
+  h1,
+  h2 {
+    margin-bottom: 4px;
+    font-size: 18px;
+    text-shadow: 2px 2px #4a56a6;
+  }
+
+  .instructions {
+    margin-bottom: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .new-record {
+    margin-bottom: 2px;
+    font-size: 13px;
+  }
+
+  .result {
+    margin: 2px 0;
+    font-size: 11px;
+  }
+
+  .result strong {
+    display: inline;
+    margin-left: 4px;
+    font-size: 14px;
+  }
+
+  .panel button {
+    margin-top: 4px;
+    padding: 7px 14px;
+    font-size: 13px;
+  }
+}

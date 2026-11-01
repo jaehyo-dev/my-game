@@ -126,6 +126,10 @@
     if (muteTarget(event.target) || mode !== 'playing') {
       return;
     }
+    // 드래그 중 다른 손가락이나 손바닥이 닿아도 처음 손가락의 조작을 유지한다.
+    if (pointerId !== null && !event.isPrimary) {
+      return;
+    }
     pointerId = event.pointerId;
     targetX = pointerX(event);
     try {
@@ -194,6 +198,8 @@
   document.addEventListener('visibilitychange', () => {
     previous = 0;
     keys.clear();
+    pointerId = null;
+    targetX = null;
   });
 
   // 모바일 브라우저의 확대 제스처와 스크롤이 조작을 가로채지 않게 막는다.

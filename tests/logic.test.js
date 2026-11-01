@@ -128,10 +128,23 @@ test('이동: 키보드로 계속 눌러도 벽에서 멈춤', () => {
   assert.equal(x, maxX);
 });
 
-test('이동: 드래그는 손가락 위치를 따라가되 범위를 넘지 않음', () => {
-  assert.equal(L.nextShipX(100, { targetX: 150 }, 0.016), 150);
-  assert.equal(L.nextShipX(100, { targetX: -50 }, 0.016), half);
-  assert.equal(L.nextShipX(100, { targetX: 9999 }, 0.016), maxX);
+test('이동: 드래그는 가까운 손가락 위치에 바로 도착하고 지나치지 않음', () => {
+  assert.equal(L.nextShipX(100, { targetX: 110 }, 1 / 60), 110);
+  assert.equal(L.nextShipX(100, { targetX: 90 }, 1 / 60), 90);
+});
+
+test('이동: 드래그도 한 프레임에 DRAG_SPEED 이상 움직이지 못함(순간이동 방지)', () => {
+  const limit = CONFIG.DRAG_SPEED * 0.01;
+  assert.equal(L.nextShipX(100, { targetX: 230 }, 0.01), 100 + limit);
+  assert.equal(L.nextShipX(100, { targetX: 10 }, 0.01), 100 - limit);
+});
+
+test('이동: 드래그로 화면 끝까지 0.25초 안에 도착하고 범위를 넘지 않음', () => {
+  let x = 120;
+  for (let t = 0; t < 15; t++) x = L.nextShipX(x, { targetX: 9999 }, 1 / 60);
+  assert.equal(x, maxX);
+  for (let t = 0; t < 15; t++) x = L.nextShipX(x, { targetX: -9999 }, 1 / 60);
+  assert.equal(x, half);
 });
 
 test('이동: 드래그 값이 잘못되면 무시', () => {
@@ -269,7 +282,7 @@ test('진행: 긴 프레임도 최대 시간만큼만 진행해 운석이 판정
   // 큰 dt가 그대로 적용되면 운석이 우주선을 통과해 버리는 위치
   game.meteors.push({ x: game.shipX, y: CONFIG.SHIP_Y - 15, radius: 5, speed: 300, variant: 0 });
   L.stepGame(game, 10, {});
-  assert.equal(game.elapsed, CONFIG.MAX_STEP_SECONDS);
+  assert.ok(game.elapsed <= CONFIG.MAX_STEP_SECONDS + 1e-9);
   assert.equal(game.over, true);
 });
 
@@ -278,6 +291,21 @@ test('진행: 최고 속도에서도 한 프레임 이동량이 판정 크기보
   const perStep = maxSpeed * CONFIG.MAX_STEP_SECONDS;
   const hitboxHeight = CONFIG.SHIP_HEIGHT - CONFIG.SHIP_HITBOX_INSET * 2;
   assert.ok(perStep < hitboxHeight + CONFIG.METEOR_MIN_RADIUS * 2);
+});
+
+test('진행: 드래그 한 조각의 이동량이 가장 작은 운석을 건너뛸 수 없음', () => {
+  const hitboxWidth = CONFIG.SHIP_WIDTH - CONFIG.SHIP_HITBOX_INSET * 2;
+  const perStep = CONFIG.DRAG_SPEED * CONFIG.MAX_SUBSTEP_SECONDS;
+  assert.ok(perStep < hitboxWidth + CONFIG.METEOR_MIN_RADIUS * 2);
+});
+
+test('진행: 긴 프레임에서 드래그로 운석을 가로질러도 충돌함', () => {
+  const game = L.createGame(seededRng(9));
+  game.spawnTimer = 999;
+  const y = CONFIG.SHIP_Y + CONFIG.SHIP_HEIGHT / 2;
+  game.meteors.push({ x: game.shipX + 30, y, radius: CONFIG.METEOR_MIN_RADIUS, speed: 0, variant: 0 });
+  L.stepGame(game, CONFIG.MAX_STEP_SECONDS, { targetX: game.shipX + 60 });
+  assert.equal(game.over, true);
 });
 
 test('진행: 잘못된 dt는 상태를 바꾸지 않음', () => {
