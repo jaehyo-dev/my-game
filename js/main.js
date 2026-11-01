@@ -17,6 +17,7 @@
   const startBtn = document.getElementById('start-btn');
   const restartBtn = document.getElementById('restart-btn');
   const muteBtn = document.getElementById('mute-btn');
+  const versionEl = document.getElementById('version');
   const captureTarget = document.documentElement;
   const storage = logic.getSafeStorage(() => window.localStorage);
   const highScores = logic.createHighScoreStore(storage);
@@ -34,6 +35,8 @@
   let debris = []; // 부서진 운석의 파편 (연출 전용)
 
   bestEl.textContent = String(best);
+  // 버전은 js/version.js 한 곳에서 관리한다.
+  versionEl.textContent = 'v' + window.GameVersion.VERSION;
 
   // 음소거 상태와 설명을 한곳에서 갱신해 보조 기술에도 상태를 전달한다.
   function updateMuteButton() {
@@ -118,9 +121,10 @@
     }
   });
 
-  // 시작 화면 어디든 클릭으로 게임을 시작하되 음소거 조작은 제외한다.
+  // 시작 화면 어디든 클릭으로 게임을 시작하되 음소거 조작과 버전 표시 줄(이전 버전 링크)은 제외한다.
   startScreen.addEventListener('click', event => {
-    if (event.target !== startBtn && !muteTarget(event.target) && mode === 'start') {
+    const inVersionBar = event.target.closest && event.target.closest('.version-bar');
+    if (event.target !== startBtn && !muteTarget(event.target) && !inVersionBar && mode === 'start') {
       startGame();
     }
   });
@@ -178,7 +182,8 @@
       keys.add(event.code);
     }
     if (event.code === 'Enter' && !event.repeat) {
-      if (event.target === muteBtn || event.target === startBtn || event.target === restartBtn) {
+      // 버튼이나 링크에 포커스가 있으면 그 요소의 기본 Enter 동작을 따른다.
+      if (event.target === muteBtn || event.target === startBtn || event.target === restartBtn || event.target.tagName === 'A') {
         return;
       }
       if (mode === 'start') {

@@ -1,0 +1,52 @@
+# 태그(v*)가 올라오거나 변경 기록이 바뀌면, 태그는 있는데 릴리스가 없는 버전마다
+# CHANGELOG.md의 해당 부분을 설명으로 넣어 GitHub Release를 만든다.
+# 예전 커밋에 붙인 태그(이 파일이 없던 시점)도 처리할 수 있도록 매번 전체를 맞춘다.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+    branches: [master]
+    paths: ['CHANGELOG.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # 변경 기록은 항상 master의 최신 내용을 기준으로 한다.
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 릴리스가 없는 태그에 릴리스 만들기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          # 새로 만든 릴리스가 'Latest'가 되므로, 오래된 버전부터 만들어 최신 버전이 마지막에 오게 한다.
+          for version in $(node scripts/changelog.js versions | tac); do
+            tag="v$version"
+            if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "$tag: 태그가 아직 없어 건너뜀"
+              continue
+            fi
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "$tag: 이미 릴리스가 있음"
+              continue
+            fi
+            node scripts/changelog.js notes "$version" > notes.md
+            gh release create "$tag" --verify-tag --title "$tag" --notes-file notes.md
+            echo "$tag: 릴리스 생성"
+          done

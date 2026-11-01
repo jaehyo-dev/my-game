@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#080d20">
+  <title>운석 피하기</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 게임 영역: 캔버스 위에 시작 화면, 점수, 음소거 버튼, 게임오버 화면을 겹쳐 놓는다. -->
+  <main class="game-shell">
+    <canvas id="game" width="240" height="400" aria-label="운석 피하기 게임"></canvas>
+    <section id="start-screen" class="screen">
+      <div class="panel">
+        <p class="eyebrow">PIXEL ARCADE</p>
+        <h1>운석 피하기</h1>
+        <p class="instructions">PC: ←/→ 또는 A/D<br>휴대폰: 드래그<br>공격은 자동! 운석을 부수면 보너스</p>
+        <button id="start-btn" type="button">시작하기</button>
+      </div>
+    </section>
+    <section id="hud" class="hud" hidden>
+      <div>점수 <strong id="score">0</strong></div>
+      <div>최고 <strong id="best">0</strong></div>
+    </section>
+    <button id="mute-btn" class="mute" type="button" aria-label="소리 끄기" aria-pressed="false">♪</button>
+    <section id="gameover-screen" class="screen" hidden>
+      <div class="panel">
+        <p class="eyebrow">FLIGHT ENDED</p>
+        <h2>게임 오버</h2>
+        <p id="new-record" class="new-record" hidden>새 기록!</p>
+        <p class="result">이번 점수 <strong id="final-score">0</strong></p>
+        <p class="result">최고 점수 <strong id="final-best">0</strong></p>
+        <button id="restart-btn" type="button">다시 하기</button>
+      </div>
+    </section>
+  </main>
+  <!-- file://로 열어도 동작하도록 모듈 대신 일반 스크립트를 의존 순서대로 불러온다. -->
+  <script src="js/logic.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

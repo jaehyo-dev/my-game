@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080d20">
+  <title>운석 피하기 이전 버전</title>
+  <style>
+    /* 게임과 같은 색으로 맞춘 간단한 목록 페이지 */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+      background: #080d20;
+      color: #d2dcff;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+    main { max-width: 420px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; color: #fff; font-size: 24px; text-shadow: 2px 2px #4a56a6; }
+    p { margin: 0 0 20px; font-size: 14px; }
+    ul { margin: 0 0 24px; padding: 0; list-style: none; }
+    li { margin-bottom: 12px; }
+    a { color: #62f0d1; }
+    .version {
+      display: block;
+      padding: 14px 16px;
+      border: 2px solid #46568b;
+      background: #0a112a;
+      color: #fff;
+      text-decoration: none;
+    }
+    .version strong { display: block; font-size: 18px; }
+    .version span { color: #a7b0cc; font-size: 13px; }
+    .version:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>이전 버전</h1>
+    <p>예전 버전을 그대로 플레이할 수 있습니다. 최고 점수와 음소거 설정은 모든 버전이 함께 씁니다.</p>
+    <!-- 새 버전을 보관할 때 맨 위에 항목을 추가한다. -->
+    <ul>
+      <li>
+        <a class="version" href="v1.1.0/">
+          <strong>v1.1.0</strong>
+          <span>자동 공격, 칩튠 배경음, 옅은 운석 색</span>
+        </a>
+      </li>
+      <li>
+        <a class="version" href="v1.0.0/">
+          <strong>v1.0.0</strong>
+          <span>첫 공개 버전: 운석 피하기만 있는 원래 게임</span>
+        </a>
+      </li>
+    </ul>
+    <a href="../">← 최신 버전으로 돌아가기</a>
+  </main>
+</body>
+</html>

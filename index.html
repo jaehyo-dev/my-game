@@ -18,6 +18,11 @@
         <p class="instructions">PC: ←/→ 또는 A/D<br>휴대폰: 드래그<br>공격은 자동! 운석을 부수면 보너스</p>
         <button id="start-btn" type="button">시작하기</button>
       </div>
+      <!-- 시작 화면 아래 구석: 이전 버전 링크와 현재 버전 -->
+      <footer class="version-bar">
+        <a id="old-versions" href="versions/">이전 버전</a>
+        <span id="version">v1.2.0</span>
+      </footer>
     </section>
     <section id="hud" class="hud" hidden>
       <div>점수 <strong id="score">0</strong></div>
@@ -36,6 +41,7 @@
     </section>
   </main>
   <!-- file://로 열어도 동작하도록 모듈 대신 일반 스크립트를 의존 순서대로 불러온다. -->
+  <script src="js/version.js"></script>
   <script src="js/logic.js"></script>
   <script src="js/music.js"></script>
   <script src="js/audio.js"></script>

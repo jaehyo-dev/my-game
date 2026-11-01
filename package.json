@@ -1,6 +1,6 @@
 {
   "name": "meteor-dodge",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "private": true,
   "description": "운석 피하기 픽셀 아트 아케이드 게임",
   "scripts": {

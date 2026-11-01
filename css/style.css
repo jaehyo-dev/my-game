@@ -124,6 +124,35 @@ h2 {
   line-height: 1.9;
 }
 
+/* 시작 화면 아래 구석의 버전 표시와 이전 버전 링크. 게임 내용을 가리지 않게 작고 흐리게 둔다. */
+.version-bar {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(8px, env(safe-area-inset-bottom));
+  left: max(10px, env(safe-area-inset-left));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #8792b8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.version-bar a {
+  /* 손가락으로 누르기 쉽도록 글자보다 넓은 터치 영역을 준다. */
+  padding: 8px 4px;
+  margin: -8px -4px;
+  color: #9fb0e0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  touch-action: manipulation;
+}
+
+.version-bar a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 /* 점수 표시는 조작 영역을 가리지 않도록 포인터 입력을 통과시킨다. */
 .hud {
   position: absolute;
@@ -305,6 +334,11 @@ h2 {
   .result {
     margin: 2px 0;
     font-size: 11px;
+  }
+
+  .version-bar {
+    bottom: max(3px, env(safe-area-inset-bottom));
+    font-size: 10px;
   }
 
   .result strong {
