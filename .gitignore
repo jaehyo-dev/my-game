@@ -27,3 +27,6 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Codex 작업 로그
+logs/
